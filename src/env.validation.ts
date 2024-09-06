@@ -1,7 +1,17 @@
 import { plainToInstance } from 'class-transformer';
-import { IsNumber, IsOptional, IsString, validateSync } from 'class-validator';
+import {
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  validateSync,
+} from 'class-validator';
 
 class EnvironmentVariables {
+  @IsString()
+  @IsIn(['development', 'production'])
+  ENV: string;
+
   @IsNumber()
   @IsOptional()
   PORT: number;

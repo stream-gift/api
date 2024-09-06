@@ -11,12 +11,17 @@ datasource db {
 }
 
 model User {
-    id        String    @id @default(cuid())
-    clerkId   String    @unique
-    username  String    @unique
-    createdAt DateTime  @default(now())
-    updatedAt DateTime  @updatedAt
-    settings  Settings?
+    id        String   @id @default(cuid())
+    clerkId   String   @unique
+    username  String   @unique
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    profileImage  String?
+    profileBanner String?
+    profileColor  String?
+
+    settings Settings?
 
     donations   Donation[]
     addresses   StreamerAddress[]

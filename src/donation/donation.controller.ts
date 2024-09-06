@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Param } from '@nestjs/common';
 import { DonationService } from './donation.service';
+import { CreateDonationDto } from './dto/create-donation.dto';
 
 @Controller('donation')
 export class DonationController {
@@ -8,19 +9,9 @@ export class DonationController {
   @Post('donate')
   donate(
     @Body()
-    body: {
-      message: string;
-      name: string;
-      amount: number;
-      userId: string;
-    },
+    donation: CreateDonationDto,
   ) {
-    return this.donationService.donate(
-      body.message,
-      body.name,
-      body.amount,
-      body.userId,
-    );
+    return this.donationService.donate(donation);
   }
 
   @Get('check/:id')

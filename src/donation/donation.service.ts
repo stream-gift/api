@@ -1,12 +1,21 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Currency, DonationStatus } from '@prisma/client';
+import { CreateDonationDto } from './dto/create-donation.dto';
 
 @Injectable()
 export class DonationService {
   constructor(private prisma: PrismaService) {}
 
-  async donate(message: string, name: string, amount: number, userId: string) {
+  async donate({ message, name, amount, userId, currency }: CreateDonationDto) {
+    const streamer = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!streamer) {
+      throw new NotFoundException('Streamer not found');
+    }
+
     const address = await this.prisma.address.findFirst({
       where: { isLocked: false },
     });
@@ -22,7 +31,7 @@ export class DonationService {
         data: {
           message,
           name,
-          currency: Currency.SOL,
+          currency,
           amount,
           usd: amount * 0.001,
           userId,
