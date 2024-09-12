@@ -2,14 +2,10 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-
-  // For /v1/route, exclude /health
-  app.setGlobalPrefix('v1', {
-    exclude: ['health'],
-  });
 
   // Enable global validation pipe
   app.useGlobalPipes(
@@ -30,7 +26,11 @@ async function bootstrap() {
       'https://www.stream.gift',
       ...(process.env.ENV === 'development' ? ['http://localhost:3000'] : []),
     ],
+    credentials: process.env.ENV === 'development',
   });
+
+  // Parse and set cookies
+  app.use(cookieParser());
 
   const port = process.env.PORT || 3000;
 

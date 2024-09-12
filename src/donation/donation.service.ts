@@ -7,9 +7,15 @@ import { CreateDonationDto } from './dto/create-donation.dto';
 export class DonationService {
   constructor(private prisma: PrismaService) {}
 
-  async donate({ message, name, amount, userId, currency }: CreateDonationDto) {
-    const streamer = await this.prisma.user.findUnique({
-      where: { id: userId },
+  async donate({
+    message,
+    name,
+    amount,
+    streamerId,
+    currency,
+  }: CreateDonationDto) {
+    const streamer = await this.prisma.streamer.findUnique({
+      where: { id: streamerId },
     });
 
     if (!streamer) {
@@ -34,7 +40,7 @@ export class DonationService {
           currency,
           amount,
           usd: amount * 0.001,
-          userId,
+          streamerId,
           addressId: address.id,
           status: DonationStatus.PENDING, // Set initial status
         },
@@ -72,7 +78,7 @@ export class DonationService {
       const donation = await prisma.donation.findUnique({
         where: { id: donationId },
         include: {
-          user: {
+          streamer: {
             include: { balances: { where: { currency: Currency.SOL } } },
           },
         },
@@ -84,8 +90,8 @@ export class DonationService {
 
       await prisma.streamerBalance.update({
         where: {
-          userId_currency: {
-            userId: donation.userId,
+          streamerId_currency: {
+            streamerId: donation.streamerId,
             currency: Currency.SOL,
           },
         },

@@ -15,7 +15,7 @@ export class CreateDonationDto {
   amount: number;
 
   @IsNotEmpty()
-  userId: string;
+  streamerId: string;
 
   @IsNotEmpty()
   @IsEnum(Currency)

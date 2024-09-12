@@ -7,5 +7,6 @@ import { PrismaModule } from '../prisma/prisma.module';
   imports: [PrismaModule],
   controllers: [StreamerController],
   providers: [StreamerService],
+  exports: [StreamerService],
 })
 export class StreamerModule {}

@@ -4,71 +4,88 @@ import {
   Post,
   Body,
   UseGuards,
-  Req,
   Version,
+  Query,
+  Param,
 } from '@nestjs/common';
 import { StreamerService } from './streamer.service';
-import { ClerkAuthGuard } from '../auth/clerk-auth.guard';
 import { Currency } from '@prisma/client';
+import { OnboardDto } from './dto/onboard.dto';
+import { UserId } from 'src/common/decorators/user.decorator';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 
 @Controller('streamer')
-@UseGuards(ClerkAuthGuard)
 export class StreamerController {
   constructor(private readonly streamerService: StreamerService) {}
 
+  @Get('profile/:streamer')
+  getProfile(@Param('streamer') streamer: string) {
+    return this.streamerService.getProfile(streamer);
+  }
+
   @Post('onboard')
-  onboard(@Body() body: { address: string }, @Req() req: any) {
-    return this.streamerService.onboard(req.user.id, body.address);
+  @UseGuards(JwtAuthGuard)
+  onboard(@UserId() userId: string, @Body() body: OnboardDto) {
+    return this.streamerService.onboard(userId, body);
   }
 
   @Get('settings')
-  getSettings(@Req() req: any) {
-    return this.streamerService.getSettings(req.user.id);
+  @UseGuards(JwtAuthGuard)
+  getSettings(@UserId() userId: string) {
+    return this.streamerService.getSettings(userId);
   }
 
   @Post('settings/set')
-  setSettings(@Body() settings: any, @Req() req: any) {
-    return this.streamerService.setSettings(req.user.id, settings);
+  @UseGuards(JwtAuthGuard)
+  setSettings(@UserId() userId: string, @Body() settings: any) {
+    return this.streamerService.setSettings(userId, settings);
   }
 
   @Get('addresses')
-  getAddresses(@Req() req: any) {
-    return this.streamerService.getAddresses(req.user.id);
+  @UseGuards(JwtAuthGuard)
+  getAddresses(@UserId() userId: string) {
+    return this.streamerService.getAddresses(userId);
   }
 
   @Post('addresses/add')
+  @UseGuards(JwtAuthGuard)
   addAddress(
     @Body() body: { address: string; currency: Currency },
-    @Req() req: any,
+    @UserId() userId: string,
   ) {
-    return this.streamerService.addAddress(
-      req.user.id,
-      body.address,
-      body.currency,
-    );
+    return this.streamerService.addAddress(userId, body.address, body.currency);
   }
 
   @Get('dashboard')
-  getDashboard(@Req() req: any) {
-    return this.streamerService.getDashboard(req.user.id);
+  @UseGuards(JwtAuthGuard)
+  getDashboard(@UserId() userId: string) {
+    return this.streamerService.getDashboard(userId);
   }
 
   @Get('donations')
-  getDonations(@Req() req: any) {
-    return this.streamerService.getDonations(req.user.id);
+  @UseGuards(JwtAuthGuard)
+  getDonations(@UserId() userId: string) {
+    return this.streamerService.getDonations(userId);
+  }
+
+  @Get('balances')
+  @UseGuards(JwtAuthGuard)
+  getBalances(@UserId() userId: string) {
+    return this.streamerService.getBalances(userId);
   }
 
   @Get('withdrawals')
-  getWithdrawals(@Req() req: any) {
-    return this.streamerService.getWithdrawals(req.user.id);
+  @UseGuards(JwtAuthGuard)
+  getWithdrawals(@UserId() userId: string) {
+    return this.streamerService.getWithdrawals(userId);
   }
 
   @Post('withdraw')
-  withdraw(@Body() body: { amount: number; address: string }, @Req() req: any) {
-    return this.streamerService.withdraw(
-      req.user.id,
-      body.amount,
-      body.address,
-    );
+  @UseGuards(JwtAuthGuard)
+  withdraw(
+    @Body() body: { amount: number; address: string },
+    @UserId() userId: string,
+  ) {
+    return this.streamerService.withdraw(userId, body.amount, body.address);
   }
 }

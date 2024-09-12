@@ -11,8 +11,21 @@ datasource db {
 }
 
 model User {
-    id        String   @id @default(cuid())
-    clerkId   String   @unique
+    id    String @id @default(cuid())
+    email String @unique
+
+    googleData  Json?   @default("{}")
+    googleImage String? @default("")
+
+    twitchData  Json?   @default("{}")
+    twitchImage String? @default("")
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}
+
+model Streamer {
+    id        String   @id
     username  String   @unique
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
@@ -30,11 +43,12 @@ model User {
 }
 
 model Settings {
-    userId                String  @id @unique
-    user                  User    @relation(fields: [userId], references: [id])
-    id                    String  @default(cuid())
-    playNotificationSound Boolean @default(true)
-    animationType         String  @default("default")
+    streamerId            String   @id @unique
+    streamer              Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+    id                    String   @default(cuid())
+    playNotificationSound Boolean  @default(true)
+    animationType         String   @default("default")
+    animationParams       Json     @default("{}")
 }
 
 enum Currency {
@@ -48,18 +62,18 @@ enum DonationStatus {
 }
 
 model Donation {
-    id        String         @id @default(cuid())
-    amount    Int
-    currency  Currency
-    usd       Int
-    message   String?
-    name      String?
-    status    DonationStatus @default(PENDING)
-    createdAt DateTime       @default(now())
-    userId    String
-    user      User           @relation(fields: [userId], references: [id])
-    addressId String
-    address   Address        @relation(fields: [addressId], references: [id])
+    id         String         @id @default(cuid())
+    amount     Int
+    currency   Currency
+    usd        Int
+    message    String?
+    name       String?
+    status     DonationStatus @default(PENDING)
+    createdAt  DateTime       @default(now())
+    streamerId String
+    streamer   Streamer       @relation(fields: [streamerId], references: [id])
+    addressId  String
+    address    Address        @relation(fields: [addressId], references: [id])
 }
 
 model Address {
@@ -72,24 +86,24 @@ model Address {
 }
 
 model StreamerAddress {
-    id        String   @id @default(cuid())
-    address   String
-    currency  Currency
-    userId    String
-    user      User     @relation(fields: [userId], references: [id])
-    createdAt DateTime @default(now())
+    id         String   @id @default(cuid())
+    address    String
+    currency   Currency
+    streamerId String
+    streamer   Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+    createdAt  DateTime @default(now())
 }
 
 model StreamerBalance {
-    id        String   @id @default(cuid())
-    userId    String
-    user      User     @relation(fields: [userId], references: [id])
-    balance   Float    @default(0)
-    pending   Float    @default(0)
-    currency  Currency
-    updatedAt DateTime @updatedAt
+    id         String   @id @default(cuid())
+    streamerId String
+    streamer   Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+    balance    Float    @default(0)
+    pending    Float    @default(0)
+    currency   Currency
+    updatedAt  DateTime @updatedAt
 
-    @@unique([userId, currency])
+    @@unique([streamerId, currency])
 }
 
 enum StreamerWithdrawalStatus {
@@ -99,13 +113,13 @@ enum StreamerWithdrawalStatus {
 }
 
 model StreamerWithdrawal {
-    id        String                   @id @default(cuid())
-    amount    Float
-    address   String
-    currency  Currency
-    status    StreamerWithdrawalStatus @default(PENDING)
-    userId    String
-    user      User                     @relation(fields: [userId], references: [id])
-    createdAt DateTime                 @default(now())
-    updatedAt DateTime                 @updatedAt
+    id         String                   @id @default(cuid())
+    amount     Float
+    address    String
+    currency   Currency
+    status     StreamerWithdrawalStatus @default(PENDING)
+    streamerId String
+    streamer   Streamer                 @relation(fields: [streamerId], references: [id])
+    createdAt  DateTime                 @default(now())
+    updatedAt  DateTime                 @updatedAt
 }
