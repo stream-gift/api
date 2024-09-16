@@ -3,11 +3,9 @@ import { Transform } from 'class-transformer';
 import { IsEmail, IsEnum, IsNotEmpty, MaxLength } from 'class-validator';
 
 export class CreateDonationDto {
-  @IsNotEmpty()
   @MaxLength(280)
   message: string;
 
-  @IsNotEmpty()
   @MaxLength(50)
   name: string;
 
@@ -15,7 +13,7 @@ export class CreateDonationDto {
   amount: number;
 
   @IsNotEmpty()
-  streamerId: string;
+  username: string;
 
   @IsNotEmpty()
   @IsEnum(Currency)

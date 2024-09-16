@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { TransactionModule } from './transaction/transaction.module';
 import { HealthModule } from './health/health.module';
 import { validate } from './env.validation';
+import { WalletModule } from './wallet/wallet.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { validate } from './env.validation';
     AuthModule,
     TransactionModule,
     HealthModule,
+    WalletModule,
   ],
 })
 export class AppModule {}

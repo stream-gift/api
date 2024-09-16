@@ -7,6 +7,7 @@ import {
   Version,
   Query,
   Param,
+  Delete,
 } from '@nestjs/common';
 import { StreamerService } from './streamer.service';
 import { Currency } from '@prisma/client';
@@ -56,6 +57,19 @@ export class StreamerController {
     return this.streamerService.addAddress(userId, body.address, body.currency);
   }
 
+  @Delete('addresses/remove')
+  @UseGuards(JwtAuthGuard)
+  removeAddress(
+    @Body() body: { address: string; currency: Currency },
+    @UserId() userId: string,
+  ) {
+    return this.streamerService.removeAddress(
+      userId,
+      body.address,
+      body.currency,
+    );
+  }
+
   @Get('dashboard')
   @UseGuards(JwtAuthGuard)
   getDashboard(@UserId() userId: string) {
@@ -87,5 +101,22 @@ export class StreamerController {
     @UserId() userId: string,
   ) {
     return this.streamerService.withdraw(userId, body.amount, body.address);
+  }
+
+  @Get('token')
+  @UseGuards(JwtAuthGuard)
+  getToken(@UserId() userId: string) {
+    return this.streamerService.getToken(userId);
+  }
+
+  @Post('token/refresh')
+  @UseGuards(JwtAuthGuard)
+  refreshToken(@UserId() userId: string) {
+    return this.streamerService.refreshToken(userId);
+  }
+
+  @Get('data')
+  getData(@Query('token') token: string) {
+    return this.streamerService.getStreamerData(token);
   }
 }

@@ -34,7 +34,8 @@ model Streamer {
     profileBanner String?
     profileColor  String?
 
-    settings Settings?
+    settings StreamerSettings?
+    token    StreamerToken?
 
     donations   Donation[]
     addresses   StreamerAddress[]
@@ -42,7 +43,17 @@ model Streamer {
     withdrawals StreamerWithdrawal[]
 }
 
-model Settings {
+// Used to access the streamers donation events
+model StreamerToken {
+    streamerId String   @id @unique
+    streamer   Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+    id         String   @default(cuid())
+    token      String   @default(uuid())
+    createdAt  DateTime @default(now())
+    updatedAt  DateTime @updatedAt
+}
+
+model StreamerSettings {
     streamerId            String   @id @unique
     streamer              Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
     id                    String   @default(cuid())
@@ -62,22 +73,29 @@ enum DonationStatus {
 }
 
 model Donation {
-    id         String         @id @default(cuid())
-    amount     Int
-    currency   Currency
-    usd        Int
-    message    String?
-    name       String?
-    status     DonationStatus @default(PENDING)
-    createdAt  DateTime       @default(now())
-    streamerId String
-    streamer   Streamer       @relation(fields: [streamerId], references: [id])
-    addressId  String
-    address    Address        @relation(fields: [addressId], references: [id])
+    id                String         @id @default(cuid())
+    amount            Int
+    amountFloat       Float
+    // amountAtomic is the amount in lamports, wei for ETH, satoshi for BTC, etc.
+    amountAtomic      Int
+    amountUsd         Int
+    currency          Currency
+    message           String?
+    name              String?
+    status            DonationStatus @default(PENDING)
+    createdAt         DateTime       @default(now())
+    updatedAt         DateTime       @updatedAt
+    streamerId        String
+    streamer          Streamer       @relation(fields: [streamerId], references: [id])
+    addressId         String
+    address           Address        @relation(fields: [addressId], references: [id])
+    transactionHash   String?
+    transactionSender String?
 }
 
 model Address {
     id          String     @id @default(cuid())
+    index       Int        @default(autoincrement())
     address     String     @unique
     currency    Currency
     isLocked    Boolean    @default(false)
@@ -95,31 +113,37 @@ model StreamerAddress {
 }
 
 model StreamerBalance {
-    id         String   @id @default(cuid())
-    streamerId String
-    streamer   Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
-    balance    Float    @default(0)
-    pending    Float    @default(0)
-    currency   Currency
-    updatedAt  DateTime @updatedAt
+    id            String   @id @default(cuid())
+    streamerId    String
+    streamer      Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+    balance       Float    @default(0)
+    balanceAtomic Int      @default(0)
+    balanceFloat  Float    @default(0)
+    pending       Float    @default(0)
+    currency      Currency
+    updatedAt     DateTime @updatedAt
 
     @@unique([streamerId, currency])
 }
 
 enum StreamerWithdrawalStatus {
     PENDING
+    SENT
     COMPLETED
     FAILED
 }
 
 model StreamerWithdrawal {
-    id         String                   @id @default(cuid())
-    amount     Float
-    address    String
-    currency   Currency
-    status     StreamerWithdrawalStatus @default(PENDING)
-    streamerId String
-    streamer   Streamer                 @relation(fields: [streamerId], references: [id])
-    createdAt  DateTime                 @default(now())
-    updatedAt  DateTime                 @updatedAt
+    id              String                   @id @default(cuid())
+    amount          Float
+    amountAtomic    Int
+    amountFloat     Float
+    address         String
+    currency        Currency
+    status          StreamerWithdrawalStatus @default(PENDING)
+    streamerId      String
+    streamer        Streamer                 @relation(fields: [streamerId], references: [id])
+    createdAt       DateTime                 @default(now())
+    updatedAt       DateTime                 @updatedAt
+    transactionHash String?
 }

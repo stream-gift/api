@@ -4,8 +4,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Currency, StreamerWithdrawalStatus } from '@prisma/client';
+import {
+  Currency,
+  DonationStatus,
+  StreamerWithdrawalStatus,
+} from '@prisma/client';
 import { OnboardDto } from './dto/onboard.dto';
+import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class StreamerService {
@@ -49,7 +55,13 @@ export class StreamerService {
         },
       });
 
-      await prisma.settings.create({
+      await prisma.streamerSettings.create({
+        data: {
+          streamerId: streamer.id,
+        },
+      });
+
+      await prisma.streamerToken.create({
         data: {
           streamerId: streamer.id,
         },
@@ -90,14 +102,39 @@ export class StreamerService {
       .then((streamer) => !!streamer);
   }
 
+  async getStreamerData(token: string) {
+    const streamerToken = await this.prisma.streamerToken.findFirst({
+      where: { token },
+    });
+
+    if (!streamerToken) {
+      throw new NotFoundException('Streamer not found');
+    }
+
+    const streamer = await this.prisma.streamer.findUnique({
+      where: { id: streamerToken.streamerId },
+    });
+
+    const [settings] = await Promise.all([
+      this.prisma.streamerSettings.findUnique({
+        where: { streamerId: streamer.id },
+      }),
+    ]);
+
+    return {
+      streamer,
+      settings,
+    };
+  }
+
   async getSettings(streamerId: string) {
-    return this.prisma.settings.findUnique({
+    return this.prisma.streamerSettings.findUnique({
       where: { streamerId },
     });
   }
 
   async setSettings(streamerId: string, settings: any) {
-    return this.prisma.settings.upsert({
+    return this.prisma.streamerSettings.upsert({
       where: { streamerId },
       update: settings,
       create: { ...settings, streamerId },
@@ -116,14 +153,100 @@ export class StreamerService {
     });
   }
 
+  async removeAddress(streamerId: string, address: string, currency: Currency) {
+    const totalAddresses = await this.prisma.streamerAddress.count({
+      where: { streamerId },
+    });
+
+    if (totalAddresses === 1) {
+      throw new BadRequestException('Cannot remove only address');
+    }
+
+    const addressToRemove = await this.prisma.streamerAddress.findFirst({
+      where: { streamerId, address, currency },
+    });
+
+    if (!addressToRemove) {
+      throw new NotFoundException('Address not found');
+    }
+
+    return this.prisma.streamerAddress.delete({
+      where: { id: addressToRemove.id },
+    });
+  }
+
   async getDashboard(streamerId: string) {
-    const [donations, withdrawals, balances] = await Promise.all([
-      this.prisma.donation.findMany({ where: { streamerId } }),
+    const [donations, withdrawals, balances, token] = await Promise.all([
+      this.prisma.donation.findMany({
+        where: { streamerId, status: DonationStatus.COMPLETED },
+      }),
       this.prisma.streamerWithdrawal.findMany({ where: { streamerId } }),
       this.prisma.streamerBalance.findMany({ where: { streamerId } }),
+      this.prisma.streamerToken
+        .findFirst({ where: { streamerId } })
+        .then((token) => token?.token),
     ]);
 
-    return { donations, withdrawals, balances };
+    const [
+      totalDonations,
+      totalDonationsAmount,
+      last24HoursDonations,
+      last24HoursDonationsAmount,
+      last7DaysDonations,
+      last7DaysDonationsAmount,
+    ] = await Promise.all([
+      this.prisma.donation.count({
+        where: { streamerId, status: DonationStatus.COMPLETED },
+      }),
+      this.prisma.donation.aggregate({
+        where: { streamerId, status: DonationStatus.COMPLETED },
+        _sum: { amount: true },
+      }),
+      this.prisma.donation.count({
+        where: {
+          streamerId,
+          status: DonationStatus.COMPLETED,
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+      }),
+      this.prisma.donation.aggregate({
+        where: {
+          streamerId,
+          status: DonationStatus.COMPLETED,
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+        _sum: { amount: true },
+      }),
+      this.prisma.donation.count({
+        where: {
+          streamerId,
+          status: DonationStatus.COMPLETED,
+          createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        },
+      }),
+      this.prisma.donation.aggregate({
+        where: {
+          streamerId,
+          status: DonationStatus.COMPLETED,
+          createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    return {
+      donations,
+      withdrawals,
+      balances,
+      aggregated: {
+        totalDonations,
+        totalDonationsAmount: totalDonationsAmount._sum.amount,
+        last24HoursDonations,
+        last24HoursDonationsAmount: last24HoursDonationsAmount._sum.amount,
+        last7DaysDonations,
+        last7DaysDonationsAmount: last7DaysDonationsAmount._sum.amount,
+      },
+    };
   }
 
   async getDonations(streamerId: string) {
@@ -167,11 +290,33 @@ export class StreamerService {
         data: {
           streamerId,
           currency: Currency.SOL,
-          amount,
+          amount: amount * LAMPORTS_PER_SOL,
+          amountFloat: amount,
+          amountAtomic: amount * LAMPORTS_PER_SOL,
           address,
           status: StreamerWithdrawalStatus.PENDING,
         },
       });
     });
+  }
+
+  async getToken(streamerId: string) {
+    const token = await this.prisma.streamerToken
+      .findUnique({ where: { streamerId } })
+      .then((token) => token?.token);
+
+    return { token };
+  }
+
+  async refreshToken(streamerId: string) {
+    const uuid = uuidv4();
+    const token = await this.prisma.streamerToken
+      .update({
+        where: { streamerId },
+        data: { token: uuid },
+      })
+      .then(() => uuid);
+
+    return { token };
   }
 }
