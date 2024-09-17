@@ -73,24 +73,25 @@ enum DonationStatus {
 }
 
 model Donation {
-    id                String         @id @default(cuid())
-    amount            Int
-    amountFloat       Float
+    id                          String         @id @default(cuid())
+    amount                      Int
+    amountFloat                 Float
     // amountAtomic is the amount in lamports, wei for ETH, satoshi for BTC, etc.
-    amountAtomic      Int
-    amountUsd         Int
-    currency          Currency
-    message           String?
-    name              String?
-    status            DonationStatus @default(PENDING)
-    createdAt         DateTime       @default(now())
-    updatedAt         DateTime       @updatedAt
-    streamerId        String
-    streamer          Streamer       @relation(fields: [streamerId], references: [id])
-    addressId         String
-    address           Address        @relation(fields: [addressId], references: [id])
-    transactionHash   String?
-    transactionSender String?
+    amountAtomic                Int
+    amountUsd                   Int
+    currency                    Currency
+    message                     String?
+    name                        String?
+    status                      DonationStatus @default(PENDING)
+    createdAt                   DateTime       @default(now())
+    updatedAt                   DateTime       @updatedAt
+    streamerId                  String
+    streamer                    Streamer       @relation(fields: [streamerId], references: [id])
+    addressId                   String
+    address                     Address        @relation(fields: [addressId], references: [id])
+    transactionHash             String?
+    transactionSender           String?
+    transactionSenderDomainName String?
 }
 
 model Address {

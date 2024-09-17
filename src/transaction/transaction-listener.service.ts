@@ -7,11 +7,20 @@ import {
   Inject,
 } from '@nestjs/common';
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import {
+  getDomainKeySync,
+  NameRegistryState,
+  getAllDomains,
+  reverseLookup,
+} from '@bonfida/spl-name-service';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { DonationService } from '../donation/donation.service';
 import { DonationStatus } from '@prisma/client';
-import { SOLANA_COMMITMENT } from 'src/common/constants';
+import {
+  SOLANA_COMMITMENT,
+  WAIT_TIME_FOR_DONATION_IN_SECONDS,
+} from 'src/common/constants';
 
 @Injectable()
 export class TransactionListenerService
@@ -106,8 +115,18 @@ export class TransactionListenerService
 
         // Process the donation
         const donation = await this.prisma.donation.findFirst({
-          where: { address: { address }, status: DonationStatus.PENDING },
+          where: {
+            address: { address },
+            status: DonationStatus.PENDING,
+            createdAt: {
+              gt: new Date(
+                Date.now() - WAIT_TIME_FOR_DONATION_IN_SECONDS * 1000,
+              ),
+            },
+          },
         });
+
+        console.log({ donation });
 
         if (!donation) {
           this.logger.log(
@@ -141,10 +160,14 @@ export class TransactionListenerService
           } else {
             this.logger.log(`Donation ${donation.id} is valid. Processing...`);
 
+            const senderDomainName =
+              await this.getDomainNameFromAddress(senderAddress);
+
             await this.donationService.processDonation(
               donation.id,
               transactionHash,
               senderAddress,
+              senderDomainName,
             );
           }
 
@@ -169,6 +192,20 @@ export class TransactionListenerService
       this.subscriptions.delete(address);
       this.logger.log(`Stopped listening to address: ${address}`);
     }
+  }
+
+  async getDomainNameFromAddress(address: string) {
+    const ownerWallet = new PublicKey(address);
+    const allDomainKeys = await getAllDomains(this.connection, ownerWallet);
+
+    if (allDomainKeys.length === 0) {
+      return null;
+    }
+
+    const [domainNameKey] = allDomainKeys;
+    const domainName = await reverseLookup(this.connection, domainNameKey);
+
+    return domainName;
   }
 
   /**

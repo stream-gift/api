@@ -128,6 +128,7 @@ export class DonationService {
     donationId: string,
     transactionHash: string,
     transactionSender: string,
+    transactionSenderDomainName: string | null,
   ) {
     return this.prisma.$transaction(async (prisma) => {
       const donation = await prisma.donation.findUnique({
@@ -159,6 +160,7 @@ export class DonationService {
           status: DonationStatus.COMPLETED,
           transactionHash,
           transactionSender,
+          transactionSenderDomainName,
         },
       });
     });
