@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -10,17 +11,22 @@ import { Currency, DonationStatus } from '@prisma/client';
 import { CreateDonationDto } from './dto/create-donation.dto';
 import { WalletService } from 'src/wallet/wallet.service';
 import { WAIT_TIME_FOR_DONATION_IN_SECONDS } from 'src/common/constants';
-import { TransactionListenerService } from 'src/transaction/transaction-listener.service';
+import { BlockchainService } from 'src/blockchain/blockchain.service';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { cleanText } from 'src/common/utils/profanity';
+import { PriceService } from 'src/price/price.service';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class DonationService {
+  private readonly logger = new Logger(DonationService.name);
+
   constructor(
     private prisma: PrismaService,
     private walletService: WalletService,
-    @Inject(forwardRef(() => TransactionListenerService))
-    private transactionListenerService: TransactionListenerService,
+    @Inject(forwardRef(() => BlockchainService))
+    private BlockchainService: BlockchainService,
+    private priceService: PriceService,
   ) {}
 
   async donate({
@@ -41,12 +47,12 @@ export class DonationService {
     let address = await this.prisma.address.findFirst({
       where: {
         OR: [
-          { isLocked: false },
           {
             lockedUntil: {
               lt: new Date(),
             },
           },
+          { lockedUntil: null },
         ],
       },
     });
@@ -54,6 +60,13 @@ export class DonationService {
     if (!address) {
       address = await this.walletService.createWallet();
     }
+
+    const solanaPrice = await this.priceService.getSolanaPrice();
+    const solanaPriceCents = Math.floor(solanaPrice * 100);
+
+    const donationAliveUntil = new Date(
+      Date.now() + WAIT_TIME_FOR_DONATION_IN_SECONDS * 1000,
+    );
 
     return this.prisma.$transaction(async (prisma) => {
       const donation = await prisma.donation.create({
@@ -64,24 +77,22 @@ export class DonationService {
           amount: amount * LAMPORTS_PER_SOL,
           amountFloat: amount,
           amountAtomic: amount * LAMPORTS_PER_SOL,
-          amountUsd: Math.floor(amount * 13070),
+          amountUsd: Math.floor(amount * solanaPriceCents),
           streamerId: streamer.id,
           addressId: address.id,
           status: DonationStatus.PENDING, // Set initial status
+          pendingUntil: donationAliveUntil,
         },
       });
 
       await prisma.address.update({
         where: { id: address.id },
         data: {
-          isLocked: true,
-          lockedUntil: new Date(
-            Date.now() + WAIT_TIME_FOR_DONATION_IN_SECONDS * 1000,
-          ),
+          lockedUntil: donationAliveUntil,
         },
       });
 
-      this.transactionListenerService.listenToAddress(address.address);
+      this.BlockchainService.listenToAddress(address.address);
 
       return {
         donation,
@@ -151,7 +162,7 @@ export class DonationService {
 
       await prisma.address.update({
         where: { id: donation.addressId },
-        data: { isLocked: false, lockedUntil: null },
+        data: { lockedUntil: null },
       });
 
       return prisma.donation.update({
@@ -163,6 +174,21 @@ export class DonationService {
           transactionSenderDomainName,
         },
       });
+    });
+  }
+
+  /**
+   * @description Move status to failed for donations that were not paid until expiry
+   **/
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async failUnpaidDonations() {
+    this.logger.log('Updating unpaid donations');
+    await this.prisma.donation.updateMany({
+      where: {
+        status: DonationStatus.PENDING,
+        pendingUntil: { lt: new Date() },
+      },
+      data: { status: DonationStatus.FAILED },
     });
   }
 }

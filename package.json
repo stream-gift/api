@@ -29,6 +29,7 @@
     "@nestjs/mapped-types": "*",
     "@nestjs/passport": "^10.0.3",
     "@nestjs/platform-express": "^10.0.0",
+    "@nestjs/schedule": "^4.1.1",
     "@nestjs/terminus": "^10.2.3",
     "@prisma/client": "^5.19.1",
     "@solana/web3.js": "^1.95.3",

@@ -1,11 +1,11 @@
 import { forwardRef, Module } from '@nestjs/common';
-import { TransactionListenerService } from './transaction-listener.service';
+import { BlockchainService } from './blockchain.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { DonationModule } from '../donation/donation.module';
 
 @Module({
   imports: [PrismaModule, forwardRef(() => DonationModule)],
-  providers: [TransactionListenerService],
-  exports: [TransactionListenerService],
+  providers: [BlockchainService],
+  exports: [BlockchainService],
 })
-export class TransactionModule {}
+export class BlockchainModule {}

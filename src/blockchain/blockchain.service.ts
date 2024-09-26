@@ -7,26 +7,16 @@ import {
   Inject,
 } from '@nestjs/common';
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import {
-  getDomainKeySync,
-  NameRegistryState,
-  getAllDomains,
-  reverseLookup,
-} from '@bonfida/spl-name-service';
+import { getAllDomains, reverseLookup } from '@bonfida/spl-name-service';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { DonationService } from '../donation/donation.service';
 import { DonationStatus } from '@prisma/client';
-import {
-  SOLANA_COMMITMENT,
-  WAIT_TIME_FOR_DONATION_IN_SECONDS,
-} from 'src/common/constants';
+import { SOLANA_COMMITMENT } from 'src/common/constants';
 
 @Injectable()
-export class TransactionListenerService
-  implements OnModuleInit, OnModuleDestroy
-{
-  private readonly logger = new Logger(TransactionListenerService.name);
+export class BlockchainService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(BlockchainService.name);
 
   private connection: Connection;
   private subscriptions: Map<string, number> = new Map();
@@ -54,7 +44,7 @@ export class TransactionListenerService
 
   private async startListeningToAllAddresses() {
     const addresses = await this.prisma.address.findMany({
-      where: { isLocked: true, lockedUntil: { gt: new Date() } },
+      where: { lockedUntil: { gt: new Date() } },
     });
 
     for (const address of addresses) {
@@ -105,28 +95,16 @@ export class TransactionListenerService
           `Received ${amount} SOL at ${address} from ${senderAddress}! Total Balance: ${newBalance} SOL`,
         );
 
-        // console.log({
-        //   transactionHash,
-        //   transaction: JSON.stringify(transaction, null, 2),
-        //   sigs: transaction.transaction.signatures,
-        //   signatures,
-        //   senderAddress,
-        // });
-
         // Process the donation
         const donation = await this.prisma.donation.findFirst({
           where: {
             address: { address },
             status: DonationStatus.PENDING,
-            createdAt: {
-              gt: new Date(
-                Date.now() - WAIT_TIME_FOR_DONATION_IN_SECONDS * 1000,
-              ),
+            pendingUntil: {
+              gte: new Date(),
             },
           },
         });
-
-        console.log({ donation });
 
         if (!donation) {
           this.logger.log(
@@ -151,7 +129,7 @@ export class TransactionListenerService
 
             await this.prisma.address.update({
               where: { address },
-              data: { isLocked: false, lockedUntil: null },
+              data: { lockedUntil: null },
             });
 
             this.logger.error(
@@ -206,14 +184,5 @@ export class TransactionListenerService
     const domainName = await reverseLookup(this.connection, domainNameKey);
 
     return domainName;
-  }
-
-  /**
-   * @description Manual (timely) check for pending transactions, useful if app was down
-   **/
-  async checkAllPendingTransactions() {
-    const addresses = await this.prisma.address.findMany({
-      where: { isLocked: true },
-    });
   }
 }
