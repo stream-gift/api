@@ -22,13 +22,13 @@ export class DonationController {
     return this.donationService.getDonationEvents(token, since);
   }
 
+  @Get('leaderboard')
+  getLeaderboard() {
+    return this.donationService.getLeaderboard();
+  }
+
   @Get(':id')
   getDonation(@Param('id') id: string) {
     return this.donationService.getDonation(id);
   }
-
-  // @Post('check/:id')
-  // checkDonation(@Param('id') id: string) {
-  //   return this.donationService.checkDonation(id);
-  // }
 }

@@ -6,13 +6,27 @@ import {
   forwardRef,
   Inject,
 } from '@nestjs/common';
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import {
+  Connection,
+  PublicKey,
+  LAMPORTS_PER_SOL,
+  Transaction,
+  SystemProgram,
+  sendAndConfirmTransaction,
+  Keypair,
+} from '@solana/web3.js';
 import { getAllDomains, reverseLookup } from '@bonfida/spl-name-service';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { DonationService } from '../donation/donation.service';
-import { DonationStatus } from '@prisma/client';
+import {
+  DonationStatus,
+  StreamerWithdrawal,
+  StreamerWithdrawalStatus,
+} from '@prisma/client';
 import { SOLANA_COMMITMENT } from 'src/common/constants';
+import { WalletService } from 'src/wallet/wallet.service';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class BlockchainService implements OnModuleInit, OnModuleDestroy {
@@ -26,6 +40,7 @@ export class BlockchainService implements OnModuleInit, OnModuleDestroy {
     private prisma: PrismaService,
     @Inject(forwardRef(() => DonationService))
     private donationService: DonationService,
+    private walletService: WalletService,
   ) {
     const wsEndpoint = this.configService.get<string>('SOLANA_WS_ENDPOINT');
     const httpEndpoint = this.configService.get<string>('SOLANA_HTTP_ENDPOINT');
@@ -184,5 +199,115 @@ export class BlockchainService implements OnModuleInit, OnModuleDestroy {
     const domainName = await reverseLookup(this.connection, domainNameKey);
 
     return domainName;
+  }
+
+  async initiateWithdrawal(withdrawal: StreamerWithdrawal) {
+    // Get sender wallet
+    const addresses = await this.prisma.address.findMany();
+
+    let senderPublicKey: PublicKey;
+
+    for (const address of addresses) {
+      const publicKey = new PublicKey(address.address);
+      const balance = await this.connection.getBalance(publicKey);
+      const balanceInSol = balance / LAMPORTS_PER_SOL;
+
+      if (balanceInSol >= withdrawal.amountFloat) {
+        senderPublicKey = publicKey;
+        break;
+      }
+    }
+
+    if (!senderPublicKey) {
+      await this.prisma.streamerWithdrawal.update({
+        where: { id: withdrawal.id },
+        data: { status: 'FAILED' },
+      });
+      throw new Error('No sender address found');
+    }
+
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: senderPublicKey,
+        toPubkey: new PublicKey(withdrawal.address),
+        lamports: withdrawal.amountAtomic,
+      }),
+    );
+
+    const signature = await sendAndConfirmTransaction(
+      this.connection,
+      transaction,
+      [
+        await this.walletService.getWalletKeypairFromAddress(
+          senderPublicKey.toBase58(),
+        ),
+      ],
+    );
+
+    await this.prisma.streamerWithdrawal.update({
+      where: { id: withdrawal.id },
+      data: {
+        status: StreamerWithdrawalStatus.SENT,
+        transactionHash: signature,
+      },
+    });
+  }
+
+  @Cron(CronExpression.EVERY_MINUTE)
+  async checkSentWithdrawals() {
+    const withdrawals = await this.prisma.streamerWithdrawal.findMany({
+      where: { status: StreamerWithdrawalStatus.SENT },
+    });
+
+    for (const withdrawal of withdrawals) {
+      const transaction = await this.connection.getParsedTransaction(
+        withdrawal.transactionHash,
+        { maxSupportedTransactionVersion: 0 },
+      );
+
+      if (!transaction) {
+        continue;
+      }
+
+      // Withdrawal TX Failed
+      if (transaction.meta.err) {
+        this.prisma.$transaction([
+          this.prisma.streamerWithdrawal.update({
+            where: { id: withdrawal.id },
+            data: { status: StreamerWithdrawalStatus.FAILED },
+          }),
+          this.prisma.streamerBalance.update({
+            where: {
+              streamerId_currency: {
+                streamerId: withdrawal.streamerId,
+                currency: withdrawal.currency,
+              },
+            },
+            data: {
+              balance: { increment: withdrawal.amountFloat },
+              pending: { decrement: withdrawal.amountFloat },
+            },
+          }),
+        ]);
+      } else {
+        await this.prisma.$transaction([
+          this.prisma.streamerWithdrawal.update({
+            where: { id: withdrawal.id },
+            data: { status: StreamerWithdrawalStatus.COMPLETED },
+          }),
+          this.prisma.streamerBalance.update({
+            where: {
+              streamerId_currency: {
+                streamerId: withdrawal.streamerId,
+                currency: withdrawal.currency,
+              },
+            },
+            data: {
+              pending: 0,
+            },
+          }),
+        ]);
+      }
+    }
   }
 }

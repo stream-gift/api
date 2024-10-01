@@ -177,6 +177,44 @@ export class DonationService {
     });
   }
 
+  async getLeaderboard() {
+    const topStreamersByDonationAmount = await this.prisma.donation.groupBy({
+      by: ['streamerId'],
+      _sum: {
+        amount: true,
+      },
+      orderBy: {
+        _sum: {
+          amount: 'desc',
+        },
+      },
+      take: 10,
+    });
+
+    const streamersWithDetails = await this.prisma.streamer.findMany({
+      where: {
+        id: {
+          in: topStreamersByDonationAmount.map((item) => item.streamerId),
+        },
+      },
+      select: {
+        id: true,
+        username: true,
+        profileImage: true,
+      },
+    });
+
+    // Combine the results
+    const result = topStreamersByDonationAmount.map((item) => ({
+      ...streamersWithDetails.find(
+        (streamer) => streamer.id === item.streamerId,
+      ),
+      totalDonationAmount: item._sum.amount,
+    }));
+
+    return result;
+  }
+
   /**
    * @description Move status to failed for donations that were not paid until expiry
    **/

@@ -60,4 +60,15 @@ export class WalletService {
       },
     });
   }
+
+  async getWalletKeypairFromAddress(address: string) {
+    const { index } = await this.prisma.address.findUnique({
+      where: { address },
+    });
+
+    const path = `m/44'/501'/${index}'/0'`;
+    const derivedKey = derivePath(path, this.seed.toString('hex')).key;
+
+    return Keypair.fromSeed(derivedKey);
+  }
 }

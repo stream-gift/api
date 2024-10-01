@@ -114,15 +114,13 @@ model StreamerAddress {
 }
 
 model StreamerBalance {
-    id            String   @id @default(cuid())
-    streamerId    String
-    streamer      Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
-    balance       Float    @default(0)
-    balanceAtomic Int      @default(0)
-    balanceFloat  Float    @default(0)
-    pending       Float    @default(0)
-    currency      Currency
-    updatedAt     DateTime @updatedAt
+    id         String   @id @default(cuid())
+    streamerId String
+    streamer   Streamer @relation(fields: [streamerId], references: [id], onDelete: Cascade)
+    balance    Float    @default(0)
+    pending    Float    @default(0)
+    currency   Currency
+    updatedAt  DateTime @updatedAt
 
     @@unique([streamerId, currency])
 }

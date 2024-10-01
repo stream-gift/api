@@ -12,10 +12,14 @@ import {
 import { OnboardDto } from './dto/onboard.dto';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { v4 as uuidv4 } from 'uuid';
+import { BlockchainService } from 'src/blockchain/blockchain.service';
 
 @Injectable()
 export class StreamerService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private blockchainService: BlockchainService,
+  ) {}
 
   async onboard(
     userId: string,
@@ -134,10 +138,9 @@ export class StreamerService {
   }
 
   async setSettings(streamerId: string, settings: any) {
-    return this.prisma.streamerSettings.upsert({
+    return this.prisma.streamerSettings.update({
       where: { streamerId },
-      update: settings,
-      create: { ...settings, streamerId },
+      data: { ...settings, streamerId },
     });
   }
 
@@ -178,7 +181,11 @@ export class StreamerService {
   async getDashboard(streamerId: string) {
     const [donations, withdrawals, balances, token] = await Promise.all([
       this.prisma.donation.findMany({
-        where: { streamerId, status: DonationStatus.COMPLETED },
+        where: {
+          streamerId,
+          status: DonationStatus.COMPLETED,
+        },
+        orderBy: { createdAt: 'desc' },
       }),
       this.prisma.streamerWithdrawal.findMany({ where: { streamerId } }),
       this.prisma.streamerBalance.findMany({ where: { streamerId } }),
@@ -273,11 +280,15 @@ export class StreamerService {
     const balances = await this.prisma.streamerBalance.findMany({
       where: { streamerId },
     });
-    if (balances.some((balance) => balance.balance < amount)) {
+
+    if (
+      balances.find((balance) => balance.currency === Currency.SOL)?.balance <
+      amount
+    ) {
       throw new NotFoundException('Insufficient funds');
     }
 
-    return this.prisma.$transaction(async (prisma) => {
+    const withdrawal = await this.prisma.$transaction(async (prisma) => {
       await prisma.streamerBalance.update({
         where: { streamerId_currency: { streamerId, currency: Currency.SOL } },
         data: {
@@ -290,14 +301,18 @@ export class StreamerService {
         data: {
           streamerId,
           currency: Currency.SOL,
-          amount: amount * LAMPORTS_PER_SOL,
-          amountFloat: amount,
-          amountAtomic: amount * LAMPORTS_PER_SOL,
+          amount: amount,
+          amountFloat: amount / LAMPORTS_PER_SOL,
+          amountAtomic: amount,
           address,
           status: StreamerWithdrawalStatus.PENDING,
         },
       });
     });
+
+    this.blockchainService.initiateWithdrawal(withdrawal);
+
+    return withdrawal;
   }
 
   async getToken(streamerId: string) {
@@ -305,7 +320,7 @@ export class StreamerService {
       .findUnique({ where: { streamerId } })
       .then((token) => token?.token);
 
-    return { token };
+    return token;
   }
 
   async refreshToken(streamerId: string) {
