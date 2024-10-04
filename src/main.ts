@@ -25,7 +25,7 @@ async function bootstrap() {
       'https://www.stream.gift',
       ...(process.env.ENV === 'development' ? ['http://localhost:3000'] : []),
     ],
-    credentials: process.env.ENV === 'development',
+    credentials: true,
   });
 
   // Parse and set cookies
