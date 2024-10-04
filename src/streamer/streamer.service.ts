@@ -79,7 +79,11 @@ export class StreamerService {
         },
       });
 
-      return streamer;
+      return {
+        ...streamer,
+        streamerDomainName:
+          await this.blockchainService.getDomainNameFromAddress(address),
+      };
     });
   }
 
