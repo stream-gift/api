@@ -1,5 +1,7 @@
 import {
+  IsEmpty,
   IsNotEmpty,
+  IsOptional,
   IsString,
   IsUrl,
   MaxLength,
@@ -26,10 +28,9 @@ export class OnboardDto {
   address: string;
 
   @IsUrl()
-  @Validate((url: string) => url === '' || url.startsWith('https://utfs.io/f/'))
+  @Validate((url: string) => url.startsWith('https://utfs.io/f/'))
   profileImage: string;
 
-  @IsUrl()
   @Validate((url: string) => url === '' || url.startsWith('https://utfs.io/f/'))
   profileBanner: string;
 
