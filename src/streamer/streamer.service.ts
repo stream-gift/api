@@ -90,7 +90,15 @@ export class StreamerService {
   async getProfile(username: string) {
     return this.prisma.streamer.findFirst({
       where: {
-        OR: [{ username }, { id: username }],
+        OR: [
+          {
+            username: {
+              equals: username,
+              mode: 'insensitive',
+            },
+          },
+          { id: username },
+        ],
       },
       select: {
         id: true,
