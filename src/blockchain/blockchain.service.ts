@@ -17,7 +17,6 @@ import {
 import { WalletService } from 'src/wallet/wallet.service';
 import {
   CoinBalance,
-  PaginatedObjectsResponse,
   PaginatedTransactionResponse,
   SuiClient,
   SuiTransactionBlockResponse,
@@ -136,22 +135,6 @@ export class BlockchainService implements OnModuleInit, OnModuleDestroy {
     }
 
     const donation = await this.prisma.donation.findFirst({
-Readme
-Activity
-Custom properties
-Stars
-0 stars
-Watchers
-0 watching
-Forks
-0 forks
-Releases
-No releases published
-Create a new release
-Packages
-No packages published
-Publish your first package
-Contributors 2 
       where: {
         address: { address },
         status: DonationStatus.PENDING,
