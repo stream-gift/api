@@ -9,6 +9,7 @@ import { getURL } from 'src/common/utils';
 import { GoogleGuard } from './guards/google.guard';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { TiktokGuard } from './guards/tiktok.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -28,6 +29,7 @@ export class AuthController {
         email: true,
         googleImage: true,
         twitchImage: true,
+        tiktokImage: true,
       },
     });
   }
@@ -53,6 +55,20 @@ export class AuthController {
   @Get('google/callback')
   @UseGuards(GoogleGuard)
   loginWithGoogleCallback(@Req() req: any, @Res() response: Response) {
+    return this.onProviderCallback(
+      response,
+      req.user.userId,
+      req.user.isNewUser,
+    );
+  }
+
+  @Get('tiktok/login')
+  @UseGuards(TiktokGuard)
+  loginWithTiktok() {}
+
+  @Get('tiktok/callback')
+  @UseGuards(TiktokGuard)
+  loginWithTiktokCallback(@Req() req: any, @Res() response: Response) {
     return this.onProviderCallback(
       response,
       req.user.userId,

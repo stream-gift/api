@@ -6,6 +6,7 @@ import { PrismaModule } from 'src/prisma/prisma.module';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { GoogleStrategy } from './strategies/google.strategy';
+import { TiktokStrategy } from './strategies/tiktok.strategy';
 
 @Module({
   imports: [
@@ -19,7 +20,7 @@ import { GoogleStrategy } from './strategies/google.strategy';
       }),
     }),
   ],
-  providers: [TwitchStrategy, GoogleStrategy, JwtStrategy],
+  providers: [TwitchStrategy, GoogleStrategy, TiktokStrategy, JwtStrategy],
   exports: [],
   controllers: [AuthController],
 })
