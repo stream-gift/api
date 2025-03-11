@@ -13,7 +13,6 @@ import {
   Transaction,
   SystemProgram,
   sendAndConfirmTransaction,
-  Keypair,
 } from '@solana/web3.js';
 import { getAllDomains, reverseLookup } from '@bonfida/spl-name-service';
 import { ConfigService } from '@nestjs/config';
@@ -32,8 +31,11 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 export class BlockchainService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(BlockchainService.name);
 
-  private connection: Connection;
-  private subscriptions: Map<string, number> = new Map();
+  private solanaConnection: Connection;
+  private sonicConnection: Connection;
+
+  private subscriptions: Map<string, { solana: number; sonic: number }> =
+    new Map();
 
   constructor(
     private configService: ConfigService,
@@ -42,9 +44,26 @@ export class BlockchainService implements OnModuleInit, OnModuleDestroy {
     private donationService: DonationService,
     private walletService: WalletService,
   ) {
-    const wsEndpoint = this.configService.get<string>('SOLANA_WS_ENDPOINT');
-    const httpEndpoint = this.configService.get<string>('SOLANA_HTTP_ENDPOINT');
-    this.connection = new Connection(httpEndpoint, { wsEndpoint });
+    const solanaWsEndpoint =
+      this.configService.get<string>('SOLANA_WS_ENDPOINT');
+    const solanaHttpEndpoint = this.configService.get<string>(
+      'SOLANA_HTTP_ENDPOINT',
+    );
+
+    this.solanaConnection = new Connection(solanaHttpEndpoint, {
+      wsEndpoint: solanaWsEndpoint,
+    });
+
+    const sonicWsEndpoint = this.configService.get<string>(
+      'SONIC_L2_WS_ENDPOINT',
+    );
+    const sonicHttpEndpoint = this.configService.get<string>(
+      'SONIC_L2_HTTP_ENDPOINT',
+    );
+
+    this.sonicConnection = new Connection(sonicHttpEndpoint, {
+      wsEndpoint: sonicWsEndpoint,
+    });
   }
 
   async onModuleInit() {
@@ -74,103 +93,118 @@ export class BlockchainService implements OnModuleInit, OnModuleDestroy {
     }
 
     const publicKey = new PublicKey(address);
-    const subscriptionId = this.connection.onAccountChange(
-      publicKey,
-      async (newAccountInfo, context) => {
-        this.logger.log(`Transaction detected for address: ${address}`);
 
-        const newBalanceLamports = newAccountInfo.lamports;
-        const newBalance = newBalanceLamports / LAMPORTS_PER_SOL;
+    const handleAccountChange = async (
+      connection: Connection,
+      newAccountInfo: any,
+      context: any,
+    ) => {
+      this.logger.log(`Transaction detected for address: ${address}`);
 
-        const signatures = await this.connection.getSignaturesForAddress(
-          publicKey,
-          {},
-          SOLANA_COMMITMENT,
-        );
-        const transactionHash = signatures[0].signature;
+      const newBalanceLamports = newAccountInfo.lamports;
+      const newBalance = newBalanceLamports / LAMPORTS_PER_SOL;
 
-        const transaction = await this.connection.getTransaction(
-          transactionHash,
-          { commitment: SOLANA_COMMITMENT, maxSupportedTransactionVersion: 0 },
-        );
+      const signatures = await connection.getSignaturesForAddress(
+        publicKey,
+        {},
+        SOLANA_COMMITMENT,
+      );
+      const transactionHash = signatures[0].signature;
 
-        const preBalances = transaction.meta.preBalances;
-        const postBalances = transaction.meta.postBalances;
+      const transaction = await connection.getTransaction(transactionHash, {
+        commitment: SOLANA_COMMITMENT,
+        maxSupportedTransactionVersion: 0,
+      });
 
-        const preBalance = preBalances[1];
-        const postBalance = postBalances[1];
+      const preBalance = transaction.meta.preBalances[1];
+      const postBalance = transaction.meta.postBalances[1];
 
-        const amountLamports = postBalance - preBalance;
-        const amount = amountLamports / LAMPORTS_PER_SOL;
+      const amountLamports = postBalance - preBalance;
+      const amount = amountLamports / LAMPORTS_PER_SOL;
 
-        const sender = transaction.transaction.message.staticAccountKeys[0];
-        const senderAddress = sender.toBase58();
+      const sender = transaction.transaction.message.staticAccountKeys[0];
+      const senderAddress = sender.toBase58();
 
-        this.logger.log(
-          `Received ${amount} SOL at ${address} from ${senderAddress}! Total Balance: ${newBalance} SOL`,
-        );
+      this.logger.log(
+        `Received ${amount} SOL at ${address} from ${senderAddress}! Total Balance: ${newBalance} SOL`,
+      );
 
-        // Process the donation
-        const donation = await this.prisma.donation.findFirst({
-          where: {
-            address: { address },
-            status: DonationStatus.PENDING,
-            pendingUntil: {
-              gte: new Date(),
-            },
+      // Process the donation
+      const donation = await this.prisma.donation.findFirst({
+        where: {
+          address: { address },
+          status: DonationStatus.PENDING,
+          pendingUntil: {
+            gte: new Date(),
           },
-        });
+        },
+      });
 
-        if (!donation) {
-          this.logger.log(
-            `No pending donation found for address: ${address}, returning.`,
-          );
-          await this.stopListeningToAddress(address);
-          return;
-        } else {
-          this.logger.log(
-            `Donation ${donation.id} found for address: ${address}`,
-          );
+      if (!donation) {
+        this.logger.log(
+          `No pending donation found for address: ${address}, returning.`,
+        );
+        await this.stopListeningToAddress(address);
+        return;
+      } else {
+        this.logger.log(
+          `Donation ${donation.id} found for address: ${address}`,
+        );
 
-          if (amountLamports < donation.amountAtomic) {
-            await this.prisma.donation.update({
-              where: { id: donation.id },
-              data: {
-                status: DonationStatus.FAILED,
-                transactionHash,
-                transactionSender: senderAddress,
-              },
-            });
-
-            await this.prisma.address.update({
-              where: { address },
-              data: { lockedUntil: null },
-            });
-
-            this.logger.error(
-              `Donation ${donation.id} failed due to lower amount than expected. Expected ${donation.amountFloat} SOL, received ${amount} SOL.`,
-            );
-          } else {
-            this.logger.log(`Donation ${donation.id} is valid. Processing...`);
-
-            const senderDomainName =
-              await this.getDomainNameFromAddress(senderAddress);
-
-            await this.donationService.processDonation(
-              donation.id,
+        if (amountLamports < donation.amountAtomic) {
+          await this.prisma.donation.update({
+            where: { id: donation.id },
+            data: {
+              status: DonationStatus.FAILED,
               transactionHash,
-              senderAddress,
-              senderDomainName,
-            );
-          }
+              transactionSender: senderAddress,
+            },
+          });
 
-          await this.stopListeningToAddress(address);
+          await this.prisma.address.update({
+            where: { address },
+            data: { lockedUntil: null },
+          });
+
+          this.logger.error(
+            `Donation ${donation.id} failed due to lower amount than expected. Expected ${donation.amountFloat} SOL, received ${amount} SOL.`,
+          );
+        } else {
+          this.logger.log(`Donation ${donation.id} is valid. Processing...`);
+
+          const senderDomainName =
+            await this.getDomainNameFromAddress(senderAddress);
+
+          await this.donationService.processDonation(
+            donation.id,
+            transactionHash,
+            senderAddress,
+            senderDomainName,
+          );
         }
-      },
+
+        await this.stopListeningToAddress(address);
+      }
+    };
+
+    const solanaSubscriptionId = this.solanaConnection.onAccountChange(
+      publicKey,
+      (newAccountInfo, context) =>
+        handleAccountChange(this.solanaConnection, newAccountInfo, context),
       { commitment: SOLANA_COMMITMENT },
     );
 
-    this.subscriptions.set(address, subscriptionId);
+    const sonicSubscriptionId = this.sonicConnection.onAccountChange(
+      publicKey,
+      (newAccountInfo, context) =>
+        handleAccountChange(this.sonicConnection, newAccountInfo, context),
+      { commitment: SOLANA_COMMITMENT },
+    );
+
+    this.subscriptions.set(address, {
+      solana: solanaSubscriptionId,
+      sonic: sonicSubscriptionId,
+    });
     this.logger.log(`Started listening to address: ${address}`);
   }
 
@@ -179,9 +213,14 @@ export class BlockchainService implements OnModuleInit, OnModuleDestroy {
   }
 
   async stopListeningToAddress(address: string) {
-    const subscriptionId = this.subscriptions.get(address);
-    if (subscriptionId !== undefined) {
-      await this.connection.removeAccountChangeListener(subscriptionId);
+    const subscriptionIds = this.subscriptions.get(address);
+    if (subscriptionIds !== undefined) {
+      await this.solanaConnection.removeAccountChangeListener(
+        subscriptionIds.solana,
+      );
+      await this.sonicConnection.removeAccountChangeListener(
+        subscriptionIds.sonic,
+      );
       this.subscriptions.delete(address);
       this.logger.log(`Stopped listening to address: ${address}`);
     }
@@ -194,7 +233,7 @@ export class BlockchainService implements OnModuleInit, OnModuleDestroy {
       ? new Connection(
           this.configService.get<string>('SOLANA_MAINNET_HTTP_ENDPOINT'),
         )
-      : this.connection;
+      : this.solanaConnection;
 
     const ownerWallet = new PublicKey(address);
     const allDomainKeys = await getAllDomains(mainnetConnection, ownerWallet);
@@ -217,7 +256,7 @@ export class BlockchainService implements OnModuleInit, OnModuleDestroy {
 
     for (const address of addresses) {
       const publicKey = new PublicKey(address.address);
-      const balance = await this.connection.getBalance(publicKey);
+      const balance = await this.solanaConnection.getBalance(publicKey);
       const balanceInSol = balance / LAMPORTS_PER_SOL;
 
       if (balanceInSol >= withdrawal.amountFloat) {
@@ -243,7 +282,7 @@ export class BlockchainService implements OnModuleInit, OnModuleDestroy {
     );
 
     const signature = await sendAndConfirmTransaction(
-      this.connection,
+      this.solanaConnection,
       transaction,
       [
         await this.walletService.getWalletKeypairFromAddress(
@@ -268,7 +307,7 @@ export class BlockchainService implements OnModuleInit, OnModuleDestroy {
     });
 
     for (const withdrawal of withdrawals) {
-      const transaction = await this.connection.getParsedTransaction(
+      const transaction = await this.solanaConnection.getParsedTransaction(
         withdrawal.transactionHash,
         { maxSupportedTransactionVersion: 0 },
       );
