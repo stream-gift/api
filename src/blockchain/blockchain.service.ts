@@ -188,24 +188,24 @@ export class BlockchainService implements OnModuleInit, OnModuleDestroy {
   }
 
   async getDomainNameFromAddress(address: string) {
-    // const mainnetConnection = this.configService.get<string>(
-    //   'SOLANA_MAINNET_HTTP_ENDPOINT',
-    // )
-    //   ? new Connection(
-    //       this.configService.get<string>('SOLANA_MAINNET_HTTP_ENDPOINT'),
-    //     )
-    //   : this.connection;
+    const mainnetConnection = this.configService.get<string>(
+      'SOLANA_MAINNET_HTTP_ENDPOINT',
+    )
+      ? new Connection(
+          this.configService.get<string>('SOLANA_MAINNET_HTTP_ENDPOINT'),
+        )
+      : this.connection;
 
-    // const ownerWallet = new PublicKey(address);
-    // const allDomainKeys = await getAllDomains(mainnetConnection, ownerWallet);
+    const ownerWallet = new PublicKey(address);
+    const allDomainKeys = await getAllDomains(mainnetConnection, ownerWallet);
 
-    // if (allDomainKeys.length === 0) {
-    //   return null;
-    // }
+    if (allDomainKeys.length === 0) {
+      return null;
+    }
 
-    // const [domainNameKey] = allDomainKeys;
-    // const domainName = await reverseLookup(mainnetConnection, domainNameKey);
-    let domainName = 'user'
+    const [domainNameKey] = allDomainKeys;
+    const domainName = await reverseLookup(mainnetConnection, domainNameKey);
+
     return `${domainName}.sol`;
   }
 
