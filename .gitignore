@@ -4,6 +4,7 @@
 /build
 
 # Logs
+
 logs
 *.log
 npm-debug.log*
@@ -41,7 +42,7 @@ lerna-debug.log*
 .env.test.local
 .env.production.local
 .env.local
-
+.env.local2
 # temp directory
 .temp
 .tmp

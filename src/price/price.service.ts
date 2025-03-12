@@ -22,7 +22,7 @@ export class PriceService {
       return cached.price;
     }
 
-    const response = await this.httpService.axiosRef.get(
+    const response = await this.httpService.axiosRef.get( // RETURNS A 451 FROM SERVER-SIDE LOOOOL NEED TO REPLACE
       `https://eapi.binance.com/eapi/v1/index?underlying=${crypto}${pair}`,
     );
 
@@ -33,7 +33,7 @@ export class PriceService {
   }
 
   async getSolanaPrice(): Promise<number> {
-    return this.getPrice('SOL');
+    return /* this.getPrice('SOL'); */ 123
   }
 
   async getBitcoinPrice(): Promise<number> {

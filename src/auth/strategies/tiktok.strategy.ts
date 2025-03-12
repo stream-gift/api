@@ -26,7 +26,7 @@ export class TiktokStrategy extends PassportStrategy(Strategy, 'tiktok') {
     done: any,
   ): Promise<any> {
     let user: any;
-
+    console.log(user)
     // Find user by email
     user = await this.prismaService.user.findUnique({
       where: {
@@ -58,6 +58,10 @@ export class TiktokStrategy extends PassportStrategy(Strategy, 'tiktok') {
           tiktokImage: profile.avatarUrl,
         },
       });
+    }
+    else {
+      console.log(user)
+      return user
     }
 
     return done(null, { userId: user.id, isNewUser: false });
