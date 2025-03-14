@@ -15,7 +15,8 @@ export class TiktokStrategy extends PassportStrategy(Strategy, 'tiktok') {
       clientID: configService.get('TIKTOK_CLIENT_ID'),
       clientSecret: configService.get('TIKTOK_CLIENT_SECRET'),
       callbackURL: getURL('server', '/auth/tiktok/callback'),
-      scope: ['user.info.basic'],
+      scope: ['user.info.basic', 'user.info.stats'],
+      
     });
   }
 
@@ -26,11 +27,11 @@ export class TiktokStrategy extends PassportStrategy(Strategy, 'tiktok') {
     done: any,
   ): Promise<any> {
     let user: any;
-    console.log(user)
-    // Find user by email
+    // Find user by id
     user = await this.prismaService.user.findUnique({
       where: {
-        email: profile.email,
+        // email: profile.email, // email doesn't exist on TikTok profile / userData
+        id: profile.id,
       },
     });
 
@@ -38,7 +39,8 @@ export class TiktokStrategy extends PassportStrategy(Strategy, 'tiktok') {
     if (!user) {
       user = await this.prismaService.user.create({
         data: {
-          email: profile.email,
+          email: profile.id,
+          id: profile.id,
           tiktokData: profile,
           tiktokImage: profile.avatarUrl,
         },
@@ -51,17 +53,13 @@ export class TiktokStrategy extends PassportStrategy(Strategy, 'tiktok') {
     if (!user.tiktokData) {
       user = await this.prismaService.user.update({
         where: {
-          email: user.email,
+          email: user.id,
         },
         data: {
           tiktokData: profile,
           tiktokImage: profile.avatarUrl,
         },
       });
-    }
-    else {
-      console.log(user)
-      return user
     }
 
     return done(null, { userId: user.id, isNewUser: false });

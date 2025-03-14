@@ -25,6 +25,7 @@ export class TwitchStrategy extends PassportStrategy(Strategy, 'twitch') {
     profile: any,
     done: VerifyCallback,
   ): Promise<any> {
+
     let user: any;
 
     // Find user by email
