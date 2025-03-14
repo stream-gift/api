@@ -31,7 +31,6 @@ async function bootstrap() {
 
   // Parse and set cookies
   app.use(cookieParser());
-
   const port = process.env.PORT || 3000;
 
   await app.listen(port);
